@@ -61,6 +61,15 @@ fun SettingsScreen(
                     onClick = { showSplitTunneling = true }
                 )
             }
+
+            item {
+                SettingsItem(
+                    icon = Icons.Default.Apps,
+                    title = "Split Tunneling",
+                    subtitle = "Manage apps that bypass VPN",
+                    onClick = { showSplitTunneling = true }
+                )
+            }
         }
     }
 
