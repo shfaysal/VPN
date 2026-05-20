@@ -12,6 +12,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.vpn.MainActivity
 import com.example.vpn.R
+import com.example.vpn.data.AppDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 import android.content.pm.ServiceInfo
 
@@ -19,6 +25,8 @@ class MyVpnService : VpnService() {
 
     private var interfaceDescriptor: ParcelFileDescriptor? = null
     private var isRunning = false
+    private val serviceJob = Job()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -43,51 +51,54 @@ class MyVpnService : VpnService() {
             startForeground(NOTIFICATION_ID, createNotification())
         }
         
-        // In a real app, you would parse the WireGuard config here.
-        // For now, we are creating a dummy interface to simulate connection.
-        
-        try {
-            // Builder configuration
-            val builder = Builder()
-            
-            // Set a dummy MTU
-            builder.setMtu(1500)
-            
-            // Add a dummy address (this would normally come from the server config)
-            builder.addAddress("10.0.0.2", 24)
-            
-            // --- AD BLOCKING CONFIGURATION ---
-            // Route DNS requests to AdGuard DNS (Default: Ad-Blocking + Tracking Protection)
-            builder.addDnsServer("94.140.14.14")
-            builder.addDnsServer("94.140.15.15")
-            
-            // To ensure the system actually uses our DNS, we can route the DNS IPs themselves
-            // builder.addRoute("94.140.14.14", 32)
-            // builder.addRoute("94.140.15.15", 32)
-            // ----------------------------------
-            
-            // Route all traffic through the VPN (0.0.0.0/0)
-            // Be careful: this blocks internet if no actual tunnel is running!
-            // For testing UI without blocking internet, we might want to route a specific dummy IP.
-            // builder.addRoute("0.0.0.0", 0) 
-            
-            // Let's route a dummy subnet to be safe for this prototype
-            builder.addRoute("192.168.99.0", 24)
-            
-            builder.setSession("Aura VPN")
-            builder.setBlocking(false)
+        serviceScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@MyVpnService)
+                val bypassedApps = db.appBypassDao().getAllBypassApps().first()
+                val selectedProfile = db.vpnProfileDao().getSelectedProfile() ?: db.vpnProfileDao().getAllProfiles().first().firstOrNull()
 
-            // Create the interface
-            interfaceDescriptor = builder.establish()
-            
-            isRunning = true
-            Log.i(TAG, "VPN Interface established")
-            
-            // TODO: Start the thread that reads/writes packets to the interfaceDescriptor
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error establishing VPN", e)
-            stopSelf()
+                // Builder configuration
+                val builder = Builder()
+                
+                // Set a dummy MTU
+                builder.setMtu(1500)
+                
+                // Add a dummy address (this would normally come from the server config)
+                builder.addAddress("10.0.0.2", 24)
+                
+                // --- DNS CONFIGURATION ---
+                val dnsServer = selectedProfile?.dnsServer ?: "94.140.14.14" // Default to AdGuard if none found
+                builder.addDnsServer(dnsServer)
+                Log.d(TAG, "Using DNS Server: $dnsServer (${selectedProfile?.name ?: "Default"})")
+                
+                // --- SPLIT TUNNELING ---
+                bypassedApps.forEach { app ->
+                    try {
+                        builder.addDisallowedApplication(app.packageName)
+                        Log.d(TAG, "Bypassing app: ${app.packageName}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to disallow app: ${app.packageName}", e)
+                    }
+                }
+                
+                // Let's route a dummy subnet to be safe for this prototype
+                builder.addRoute("192.168.99.0", 24)
+                
+                builder.setSession("Aura VPN")
+                builder.setBlocking(false)
+
+                // Create the interface
+                interfaceDescriptor = builder.establish()
+                
+                isRunning = true
+                Log.i(TAG, "VPN Interface established")
+                
+                // TODO: Start the thread that reads/writes packets to the interfaceDescriptor
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error establishing VPN", e)
+                stopSelf()
+            }
         }
     }
 
@@ -121,8 +132,8 @@ class MyVpnService : VpnService() {
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Aura VPN is Connected")
-            .setContentText("Ad blocking active. Your connection is secure.")
-            .setSmallIcon(R.mipmap.ic_launcher_round) // Using default icon for now
+            .setContentText("Your connection is secure.")
+            .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -130,6 +141,7 @@ class MyVpnService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        serviceJob.cancel()
         disconnect()
     }
 

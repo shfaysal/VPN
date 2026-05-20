@@ -1,60 +1,93 @@
-# Project Context: VPN Android App
+# Project: VPN Android App (com.example.vpn)
 
-## Overview
-This is an Android application project named **VPN** (`com.example.vpn`).
-Currently, it is a **fresh project scaffold** generated with Android Studio, configured for **Modern Android Development**.
+## Purpose
+Build an Android VPN client using `VpnService` with a modern Compose UI.
+Gemini should act like a senior Android engineer + QA partner:
+- implement features safely and incrementally
+- prefer minimal, reviewable diffs
+- always include build/run/test steps for changes
+- diagnose crashes using Logcat and stack traces
 
-## Technology Stack
-- **Language:** Kotlin (`2.0.21`)
-- **UI Framework:** Jetpack Compose (Material 3 Design)
-- **Build System:** Gradle with Kotlin DSL (`.kts`) & Version Catalogs (`libs.versions.toml`)
-- **Minimum SDK:** 24 (Android 7.0 Nougat)
-- **Target/Compile SDK:** 36 (Android 15)
+---
 
-## Key Directories & Files
-- **`app/src/main/java/com/example/vpn/`**: Contains the source code.
-  - `MainActivity.kt`: The entry point activity. Currently displays a basic "Hello Android" screen.
-  - `ui/theme/`: Compose theming definitions (Color, Type, Theme).
-- **`app/src/main/AndroidManifest.xml`**: Application manifest.
-  - *Note:* No `VpnService` is currently declared. This needs to be added for actual VPN functionality.
-- **`gradle/libs.versions.toml`**: Dependency management and version definitions.
-- **`build.gradle.kts`**: Root and Module-level build configurations.
+## Tech Stack
+- Language: Kotlin
+- UI: Jetpack Compose (Material 3)
+- Build: Gradle Kotlin DSL + Version Catalogs (`libs.versions.toml`)
+- Min SDK: 24
+- Target/Compile SDK: 36
+- Architecture: (choose one) MVVM + StateFlow / MVI / simple ViewModel-first
 
-## Building and Running
-The project uses the Gradle Wrapper.
+---
 
-- **Build Debug APK:**
+## Current Status
+### Implemented
+- Compose UI scaffold + dashboard screen ("Aura VPN" branding)
+- VPN permission request flow in `MainActivity`
+- `MyVpnService` basic skeleton with:
+    - Foreground service notification
+    - TUN interface establishment
+    - AdGuard DNS configuration (94.140.14.14, 94.140.15.15)
+    - Dummy subnet routing (192.168.99.0/24) for safe testing
+
+### Not Implemented Yet
+- Real tunneling/protocol (e.g., WireGuard/OpenVPN)
+- Background packet processing loop (read/write to TUN interface)
+- Config import (.conf / QR / share intent)
+- Kill switch / Always-on VPN support
+- Split tunneling
+- Robust error handling + reconnect logic
+
+---
+
+## Key Modules & Files
+- `app/src/main/java/com/example/vpn/`
+  - `MainActivity.kt` (permission + navigation entry)
+  - `vpn/` (VpnService + tunnel/session code goes here)
+  - `ui/` (Compose screens/components)
+  - `data/` (configs, repositories, persistence)
+- `app/src/main/AndroidManifest.xml`
+  - MUST declare `VpnService` and required permissions
+- `gradle/libs.versions.toml` for dependencies
+
+---
+
+## Conventions & Engineering Rules
+### Code Style
+- Compose-only UI (no XML)
+- Use `StateFlow`/`MutableStateFlow` for UI state
+- Avoid over-engineering: prefer clear, small classes
+- Use sealed types for connection state:
+  - `Disconnected`, `Connecting`, `Connected`, `Error(...)`
+
+### Logging
+- Use consistent tags:
+  - `VPN`, `TUNNEL`, `PERMISSION`, `UI`
+- Log key lifecycle events:
+  - permission granted/denied
+  - service start/stop
+  - connect/disconnect
+  - errors with stacktrace
+
+### Security & Privacy
+- Never log secrets:
+  - private keys, tokens, full config contents
+- Redact IPs/user identifiers in logs if possible
+- Keep debug-only helpers behind `BuildConfig.DEBUG`
+
+### Networking/VPN Notes
+- `VpnService.Builder` must be configured carefully:
+  - addresses, routes, DNS, MTU
+- Always handle:
+  - `onRevoke()`
+  - service restart scenarios
+  - foreground service requirements (if applicable)
+- Add clear user-visible error messages when connect fails
+
+---
+
+## Build & Run Commands
+- Build debug:
   ```bash
   ./gradlew assembleDebug
-  ```
 
-- **Run Unit Tests:**
-  ```bash
-  ./gradlew test
-  ```
-
-- **Run Instrumented Tests:**
-  ```bash
-  ./gradlew connectedAndroidTest
-  ```
-
-- **Lint Check:**
-  ```bash
-  ./gradlew lint
-  ```
-
-## Development Status
-- **Current State:** Functional UI Prototype with VpnService Integration.
-- **Implemented:**
-  - Modern Dashboard UI with animated connection toggle.
-  - `MyVpnService` implementation for managing the VPN interface.
-  - VPN Permission handling in `MainActivity`.
-- **Pending Implementation:**
-  - Real packet routing logic (WireGuard or similar).
-  - Config file parsing (.conf/QR Code).
-  - Kill Switch and Split Tunneling features.
-
-## Conventions
-- Follow **Material 3** guidelines for UI.
-- Use **Jetpack Compose** for all UI development.
-- Manage dependencies via **Version Catalogs** (`libs.versions.toml`).
