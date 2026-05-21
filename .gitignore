@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Project-specific hidden files/folders
+.*
+.idea/
+.gemini/
